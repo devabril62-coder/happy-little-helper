@@ -11,11 +11,18 @@ serve(async (req) => {
   }
 
   try {
-    const { image, prompt, operation } = await req.json();
+    const { image, clothingDescription, clothingImage } = await req.json();
 
-    if (!image || !prompt) {
+    if (!image) {
       return new Response(
-        JSON.stringify({ error: 'Image and prompt are required' }),
+        JSON.stringify({ error: 'Image is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!clothingDescription && !clothingImage) {
+      return new Response(
+        JSON.stringify({ error: 'Clothing description or image is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -29,34 +36,36 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Processing ${operation} request with prompt: ${prompt.substring(0, 100)}...`);
+    console.log('Processing clothing change request...');
 
-    // Build optimized prompt based on operation type
-    let optimizedPrompt = prompt;
-    
-    if (operation === 'change-scene') {
-      optimizedPrompt = `Change the background/scene of this image to: ${prompt}. 
-CRITICAL REQUIREMENTS:
-- Keep the main subject/person EXACTLY the same - preserve their face, identity, clothing, and pose
-- Only change the background environment
-- Integrate the subject naturally into the new scene
-- Match lighting and shadows to the new environment
-- High quality, photorealistic result
-- Seamless integration between subject and new background`;
-    } else if (operation === 'change-style') {
-      optimizedPrompt = `Apply this artistic style to the image: ${prompt}. 
-CRITICAL REQUIREMENTS:
-- Preserve the subject's identity and recognizable features
-- Apply the style consistently across the entire image
-- Maintain the composition and pose
-- High quality result with the requested aesthetic`;
-    } else if (operation === 'custom-edit') {
-      optimizedPrompt = `${prompt}
-CRITICAL REQUIREMENTS:
-- Preserve the person's identity and facial features EXACTLY unless explicitly asked to change them
-- Apply the requested changes precisely
-- Maintain high quality and realism
-- Keep unchanged elements intact`;
+    const messageContent: any[] = [
+      {
+        type: 'text',
+        text: `Change the clothing/outfit of the person in this image. ${
+          clothingDescription 
+            ? `Replace their current clothes with: ${clothingDescription}. ` 
+            : ''
+        }CRITICAL REQUIREMENTS:
+- Preserve the person's face, identity, skin tone, and body shape EXACTLY
+- Keep the same pose and position
+- The new clothing should fit naturally on the body
+- Maintain realistic lighting and shadows
+- Keep the background unchanged
+- Make the clothing look natural and well-fitted
+- High quality, photorealistic result`
+      },
+      {
+        type: 'image_url',
+        image_url: { url: image }
+      }
+    ];
+
+    if (clothingImage) {
+      messageContent.push({
+        type: 'image_url',
+        image_url: { url: clothingImage }
+      });
+      messageContent[0].text += '\n\nUse the second image as reference for the clothing style to apply.';
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -70,16 +79,7 @@ CRITICAL REQUIREMENTS:
         messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: optimizedPrompt
-              },
-              {
-                type: 'image_url',
-                image_url: { url: image }
-              }
-            ]
+            content: messageContent
           }
         ],
         modalities: ['image', 'text']
@@ -115,7 +115,7 @@ CRITICAL REQUIREMENTS:
     const images = assistantMessage?.images;
 
     if (!images || images.length === 0) {
-      console.error('No images in response:', JSON.stringify(data).substring(0, 500));
+      console.error('No images in response');
       return new Response(
         JSON.stringify({ error: 'No image generated' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -125,26 +125,21 @@ CRITICAL REQUIREMENTS:
     const editedImage = images[0]?.image_url?.url;
 
     if (!editedImage) {
-      console.error('Invalid image format in response');
       return new Response(
         JSON.stringify({ error: 'Invalid image format' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Image processed successfully');
+    console.log('Clothing changed successfully');
 
     return new Response(
-      JSON.stringify({
-        editedImage,
-        operation,
-        message: 'Image processed successfully'
-      }),
+      JSON.stringify({ editedImage, operation: 'change-clothing' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in edit-image function:', error);
+    console.error('Error in change-clothing function:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

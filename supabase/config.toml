@@ -2,3 +2,15 @@ project_id = "scbcniklpsxzfeghraer"
 
 [functions.edit-image]
 verify_jwt = false
+
+[functions.remove-background]
+verify_jwt = false
+
+[functions.change-clothing]
+verify_jwt = false
+
+[functions.change-pose]
+verify_jwt = false
+
+[functions.generate-variations]
+verify_jwt = false
