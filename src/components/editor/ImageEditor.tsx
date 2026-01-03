@@ -13,6 +13,8 @@ export function ImageEditor() {
     removeImageBackground,
     changeScene,
     changeStyle,
+    changeClothing,
+    changePose,
     generateVariations,
     applyCustomEdit,
     selectVariation,
@@ -67,6 +69,8 @@ export function ImageEditor() {
                 onRemoveBackground={removeImageBackground}
                 onChangeScene={changeScene}
                 onChangeStyle={changeStyle}
+                onChangeClothing={changeClothing}
+                onChangePose={changePose}
                 onGenerateVariations={handleGenerateVariations}
                 onCustomEdit={applyCustomEdit}
                 disabled={imageState.isLoading}

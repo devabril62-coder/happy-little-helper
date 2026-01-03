@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { removeBackground, loadImage, imageToBase64, blobToBase64 } from '@/lib/image-processing';
+import { imageToBase64 } from '@/lib/image-processing';
 import { toast } from 'sonner';
 
 export interface ImageState {
@@ -15,7 +15,10 @@ export type EditOperation =
   | 'remove-background'
   | 'change-scene'
   | 'change-style'
-  | 'generate-variations';
+  | 'change-clothing'
+  | 'change-pose'
+  | 'generate-variations'
+  | 'custom-edit';
 
 export function useImageEditor() {
   const [imageState, setImageState] = useState<ImageState>({
@@ -57,26 +60,28 @@ export function useImageEditor() {
     }
 
     try {
-      setLoading(true, 'Removendo fundo... (carregando modelo de IA)');
+      setLoading(true, 'Removendo fundo com IA profissional...');
       
-      const img = new Image();
-      img.src = imageState.original;
-      await new Promise((resolve) => { img.onload = resolve; });
+      const { data, error } = await supabase.functions.invoke('remove-background', {
+        body: { image: imageState.original },
+      });
+
+      if (error) throw error;
       
-      setLoading(true, 'Processando imagem...');
-      const resultBlob = await removeBackground(img);
-      const resultBase64 = await blobToBase64(resultBlob);
-      
-      setImageState(prev => ({
-        ...prev,
-        edited: resultBase64,
-        isLoading: false,
-        loadingMessage: '',
-      }));
-      toast.success('Fundo removido com sucesso!');
-    } catch (error) {
+      if (data?.editedImage) {
+        setImageState(prev => ({
+          ...prev,
+          edited: data.editedImage,
+          isLoading: false,
+          loadingMessage: '',
+        }));
+        toast.success('Fundo removido com sucesso!');
+      } else {
+        throw new Error(data?.error || 'No image returned');
+      }
+    } catch (error: any) {
       console.error('Error removing background:', error);
-      toast.error('Erro ao remover fundo. Tente novamente.');
+      toast.error(error?.message || 'Erro ao remover fundo. Tente novamente.');
       setLoading(false);
     }
   }, [imageState.original]);
@@ -93,7 +98,7 @@ export function useImageEditor() {
       const { data, error } = await supabase.functions.invoke('edit-image', {
         body: {
           image: imageState.original,
-          prompt: `Change the background/scene to: ${scenePrompt}. Keep the main subject exactly the same, preserve their identity, pose, and proportions perfectly. Only change the background environment.`,
+          prompt: scenePrompt,
           operation: 'change-scene',
         },
       });
@@ -109,11 +114,11 @@ export function useImageEditor() {
         }));
         toast.success('Cenário alterado com sucesso!');
       } else {
-        throw new Error('No image returned');
+        throw new Error(data?.error || 'No image returned');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error changing scene:', error);
-      toast.error('Erro ao alterar cenário. Tente novamente.');
+      toast.error(error?.message || 'Erro ao alterar cenário. Tente novamente.');
       setLoading(false);
     }
   }, [imageState.original]);
@@ -130,7 +135,7 @@ export function useImageEditor() {
       const { data, error } = await supabase.functions.invoke('edit-image', {
         body: {
           image: imageState.original,
-          prompt: `Apply this visual style to the image: ${stylePrompt}. Preserve the subject's identity and composition.`,
+          prompt: stylePrompt,
           operation: 'change-style',
         },
       });
@@ -146,11 +151,85 @@ export function useImageEditor() {
         }));
         toast.success('Estilo aplicado com sucesso!');
       } else {
-        throw new Error('No image returned');
+        throw new Error(data?.error || 'No image returned');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error changing style:', error);
-      toast.error('Erro ao aplicar estilo. Tente novamente.');
+      toast.error(error?.message || 'Erro ao aplicar estilo. Tente novamente.');
+      setLoading(false);
+    }
+  }, [imageState.original]);
+
+  const changeClothing = useCallback(async (clothingDescription: string, clothingImage?: string) => {
+    if (!imageState.original) {
+      toast.error('Nenhuma imagem carregada');
+      return;
+    }
+
+    try {
+      setLoading(true, 'Trocando roupa com IA...');
+      
+      const { data, error } = await supabase.functions.invoke('change-clothing', {
+        body: {
+          image: imageState.original,
+          clothingDescription,
+          clothingImage,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data?.editedImage) {
+        setImageState(prev => ({
+          ...prev,
+          edited: data.editedImage,
+          isLoading: false,
+          loadingMessage: '',
+        }));
+        toast.success('Roupa alterada com sucesso!');
+      } else {
+        throw new Error(data?.error || 'No image returned');
+      }
+    } catch (error: any) {
+      console.error('Error changing clothing:', error);
+      toast.error(error?.message || 'Erro ao trocar roupa. Tente novamente.');
+      setLoading(false);
+    }
+  }, [imageState.original]);
+
+  const changePose = useCallback(async (poseDescription: string, poseImage?: string) => {
+    if (!imageState.original) {
+      toast.error('Nenhuma imagem carregada');
+      return;
+    }
+
+    try {
+      setLoading(true, 'Alterando pose com IA...');
+      
+      const { data, error } = await supabase.functions.invoke('change-pose', {
+        body: {
+          image: imageState.original,
+          poseDescription,
+          poseImage,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data?.editedImage) {
+        setImageState(prev => ({
+          ...prev,
+          edited: data.editedImage,
+          isLoading: false,
+          loadingMessage: '',
+        }));
+        toast.success('Pose alterada com sucesso!');
+      } else {
+        throw new Error(data?.error || 'No image returned');
+      }
+    } catch (error: any) {
+      console.error('Error changing pose:', error);
+      toast.error(error?.message || 'Erro ao alterar pose. Tente novamente.');
       setLoading(false);
     }
   }, [imageState.original]);
@@ -162,14 +241,13 @@ export function useImageEditor() {
     }
 
     try {
-      setLoading(true, `Gerando ${count} variações...`);
+      setLoading(true, `Gerando ${count} variações com IA...`);
       
-      const { data, error } = await supabase.functions.invoke('edit-image', {
+      const { data, error } = await supabase.functions.invoke('generate-variations', {
         body: {
           image: imageState.original,
-          prompt: variationPrompt || 'Create a variation of this image with slightly different lighting and atmosphere, but preserve the subject exactly.',
-          operation: 'generate-variations',
           count,
+          prompt: variationPrompt,
         },
       });
 
@@ -183,18 +261,12 @@ export function useImageEditor() {
           loadingMessage: '',
         }));
         toast.success(`${data.variations.length} variações geradas!`);
-      } else if (data?.editedImage) {
-        setImageState(prev => ({
-          ...prev,
-          variations: [data.editedImage],
-          isLoading: false,
-          loadingMessage: '',
-        }));
-        toast.success('Variação gerada!');
+      } else {
+        throw new Error(data?.error || 'No variations returned');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating variations:', error);
-      toast.error('Erro ao gerar variações. Tente novamente.');
+      toast.error(error?.message || 'Erro ao gerar variações. Tente novamente.');
       setLoading(false);
     }
   }, [imageState.original]);
@@ -212,7 +284,7 @@ export function useImageEditor() {
         body: {
           image: imageState.original,
           prompt: customPrompt,
-          operation: 'custom',
+          operation: 'custom-edit',
         },
       });
 
@@ -226,10 +298,12 @@ export function useImageEditor() {
           loadingMessage: '',
         }));
         toast.success('Edição aplicada com sucesso!');
+      } else {
+        throw new Error(data?.error || 'No image returned');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error applying custom edit:', error);
-      toast.error('Erro ao aplicar edição. Tente novamente.');
+      toast.error(error?.message || 'Erro ao aplicar edição. Tente novamente.');
       setLoading(false);
     }
   }, [imageState.original]);
@@ -292,6 +366,8 @@ export function useImageEditor() {
     removeImageBackground,
     changeScene,
     changeStyle,
+    changeClothing,
+    changePose,
     generateVariations,
     applyCustomEdit,
     selectVariation,
